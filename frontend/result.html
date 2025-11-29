@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nutrition Deficiency Result</title>
+  <link rel="stylesheet" href="result.css">
+</head>
+<body>
+  <div class="result-page">
+    <div class="glow-bg"></div>
+
+    <div class="result-card">
+      <h1>Your Nutrition Check</h1>
+      <p class="tagline">Here is your predicted nutritional status based on the details you entered.</p>
+
+      <!-- SUMMARY CARD -->
+      <div class="summary-card">
+        <h3>Your Details</h3>
+        <p id="sumAge"></p>
+        <p id="sumGender"></p>
+        <p id="sumHeight"></p>
+        <p id="sumWeight"></p>
+        <p id="sumDiet"></p>
+        <p id="sumSunlight"></p>
+        <p id="sumSymptoms"></p>
+      </div>
+
+      <!-- MAIN RESULT -->
+      <div class="result-main">
+        <h2 id="resLabel">Prediction: —</h2>
+        <p id="resMeasures">Measures: —</p>
+      </div>
+
+      <div class="divider"></div>
+
+      <p id="thankLine" class="thank-line"></p>
+
+      <!-- CHECK AGAIN BUTTON -->
+      <div class="back-btn-row">
+        <button class="back-btn" onclick="goBack()">⬅ Check Again</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="result.js"></script>
+</body>
+</html>
