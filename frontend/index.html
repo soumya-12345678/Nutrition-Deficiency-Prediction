@@ -23,8 +23,12 @@
           </div>
 
           <div class="field">
-            <label for="gender_text">Gender</label>
-            <input type="text" id="gender_text" name="gender_text" placeholder="Male / Female" required>
+            <label for="gender">Gender</label>
+            <select id="gender" name="gender" required>
+              <option value="" disabled selected>Select Gender</option>
+              <option value="0">Male</option>
+              <option value="1">Female</option>
+            </select>
           </div>
 
           <div class="field">
@@ -38,13 +42,23 @@
           </div>
 
           <div class="field">
-            <label for="diet_type_text">Diet Type</label>
-            <input type="text" id="diet_type_text" name="diet_type_text" placeholder="Vegetarian / Non-vegetarian" required>
+            <label for="diet_type">Diet Type</label>
+            <select id="diet_type" name="diet_type" required>
+              <option value="" disabled selected>Select Diet</option>
+              <option value="0">Vegetarian</option>
+              <option value="1">Non-vegetarian</option>
+            </select>
           </div>
 
           <div class="field">
-            <label for="sunlight">Daily Sunlight (0–3)</label>
-            <input type="number" id="sunlight" name="sunlight" min="0" max="3" placeholder="0 = low, 3 = high" required>
+            <label for="sunlight">Daily Sunlight Exposure</label>
+            <select id="sunlight" name="sunlight" required>
+              <option value="" disabled selected>Select Level</option>
+              <option value="0">Low (No direct sun)</option>
+              <option value="1">Moderate (10-20 mins)</option>
+              <option value="2">High (20-40 mins)</option>
+              <option value="3">Very High (Outdoor job/activity)</option>
+            </select>
           </div>
         </div>
 

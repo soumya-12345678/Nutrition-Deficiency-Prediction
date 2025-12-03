@@ -1,38 +1,32 @@
 const form = document.getElementById("predictForm");
 const btn = document.querySelector(".btn");
 
-function mapGender(value) {
-  if (!value) return 0;
-  const v = value.toString().trim().toLowerCase();
-  if (v.startsWith("m")) return 0;
-  if (v.startsWith("f")) return 1;
-  return 0;
-}
-
-function mapDiet(value) {
-  if (!value) return 0;
-  const v = value.toString().trim().toLowerCase();
-  if (v.includes("non")) return 1;
-  if (v.startsWith("n")) return 1;
-  if (v.startsWith("v")) return 0;
-  return 0;
-}
-
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const formData = new FormData(form);
 
-  const genderText = formData.get("gender_text");
-  const dietText = formData.get("diet_type_text");
+  // Get raw values from selects (which are already numbers in string format like "0", "1")
+  const genderVal = formData.get("gender");
+  const dietVal = formData.get("diet_type");
+  const sunlightVal = formData.get("sunlight");
+
+  // Get the display text for the summary page (e.g., "Male", "Vegetarian")
+  const genderEl = document.getElementById("gender");
+  const dietEl = document.getElementById("diet_type");
+  const sunlightEl = document.getElementById("sunlight");
+  
+  const genderText = genderEl.options[genderEl.selectedIndex].text;
+  const dietText = dietEl.options[dietEl.selectedIndex].text;
+  const sunlightText = sunlightEl.options[sunlightEl.selectedIndex].text;
 
   const payload = {
     age: Number(formData.get("age")),
-    gender: mapGender(genderText),
+    gender: Number(genderVal),
     height: Number(formData.get("height")),
     weight: Number(formData.get("weight")),
-    diet_type: mapDiet(dietText),
-    sunlight: Number(formData.get("sunlight")),
+    diet_type: Number(dietVal),
+    sunlight: Number(sunlightVal),
     fatigue: formData.get("fatigue") ? 1 : 0,
     hair_fall: formData.get("hair_fall") ? 1 : 0,
     pale_skin: formData.get("pale_skin") ? 1 : 0,
@@ -46,7 +40,7 @@ form.addEventListener("submit", async (e) => {
   localStorage.setItem("ndp_height", formData.get("height"));
   localStorage.setItem("ndp_weight", formData.get("weight"));
   localStorage.setItem("ndp_diet", dietText);
-  localStorage.setItem("ndp_sunlight", formData.get("sunlight"));
+  localStorage.setItem("ndp_sunlight", sunlightText);
 
   const symptoms = [];
   if (payload.fatigue) symptoms.push("Fatigue");

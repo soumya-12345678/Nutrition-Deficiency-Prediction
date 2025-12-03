@@ -1,70 +1,94 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pickle
 import numpy as np
-from flask_cors import CORS
-import os
 
 app = Flask(__name__)
 CORS(app)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(BASE_DIR, "model.pkl")
+# Load Model and Scaler
+try:
+    with open('model.pkl', 'rb') as f:
+        data = pickle.load(f)
+        model = data['model']
+        scaler = data['scaler']
+    print("Model and Scaler loaded successfully.")
+except FileNotFoundError:
+    print("Error: model.pkl not found. Run train_model.py first.")
+    model = None
+    scaler = None
 
-with open(model_path, "rb") as f:
-    saved = pickle.load(f)
-
-model = saved["model"]
-scaler = saved["scaler"]
-columns = saved["columns"]
-
-label_map = {
-    0: "No major deficiency",
-    1: "Iron deficiency",
-    2: "Vitamin D deficiency",
-    3: "Vitamin B12 deficiency",
-    4: "Calcium deficiency",
-    5: "Protein deficiency"
+# Labels based on our NHANES training logic
+RISK_MAP = {
+    0: {
+        "label": "Low Risk / Healthy Range",
+        "measures": "Your profile matches individuals with healthy lab results. Maintain a balanced diet rich in fruits, vegetables, and whole grains."
+    },
+    1: {
+        "label": "High Risk: Anemia / Iron Deficiency",
+        "measures": "Your profile shares characteristics with groups prone to low hemoglobin. Increase Iron intake (Spinach, Red Meat, Lentils) and Vitamin C to aid absorption."
+    },
+    2: {
+        "label": "High Risk: Elevated Cholesterol / Dietary Imbalance",
+        "measures": "Your profile suggests a risk of metabolic imbalance. Consider reducing saturated fats and increasing fiber intake (Oats, Beans)."
+    }
 }
 
-measure_map = {
-    0: "Maintain a balanced diet with fruits, vegetables, whole grains, enough water, and regular physical activity.",
-    1: "Include iron-rich foods like leafy greens, jaggery, dates, beans, sprouts; take vitamin C rich foods with meals and avoid tea/coffee immediately after eating.",
-    2: "Get 10–20 minutes of safe sunlight daily; include milk, eggs, mushrooms, and vitamin D fortified foods after consulting a professional.",
-    3: "Add foods like milk, curd, paneer, eggs, fish and fortified cereals; reduce excessive junk and processed foods.",
-    4: "Consume milk, curd, paneer, ragi, sesame seeds (til), almonds and other calcium-rich foods; do light weight-bearing exercise.",
-    5: "Increase protein intake through dal, pulses, sprouts, soya, paneer, curd, eggs, lean meat and nuts; avoid skipping meals."
-}
 
-@app.route("/")
-def home():
-    return jsonify({"message": "Nutrition Deficiency Prediction API is running."})
-
-@app.route("/predict", methods=["POST"])
+@app.route('/predict', methods=['POST'])
 def predict():
+    if not model or not scaler:
+        return jsonify({'success': False, 'error': 'Model not loaded'}), 500
+
     try:
-        data = request.json
-
-        x = [data.get(col, 0) for col in columns]
-        x = np.array(x).reshape(1, -1)
-
-        x_scaled = scaler.transform(x)
-        pred = model.predict(x_scaled)[0]
-        pred_int = int(pred)
-
-        label = label_map.get(pred_int, "Unknown")
-        measures = measure_map.get(
-            pred_int,
-            "Follow a balanced diet and consult a qualified healthcare professional if needed."
-        )
+        data = request.get_json()
+        
+        # 1. Extract Basic Features
+        age = float(data.get('age'))
+        gender = int(data.get('gender')) # 0=Male, 1=Female
+        height_cm = float(data.get('height'))
+        weight_kg = float(data.get('weight'))
+        
+        # 2. Feature Engineering (Match training logic)
+        # Calculate BMI
+        height_m = height_cm / 100.0
+        bmi = weight_kg / (height_m ** 2)
+        
+        # Prepare input vector: [Age, Gender, BMI]
+        features = np.array([[age, gender, bmi]])
+        
+        # 3. Scale Inputs
+        features_scaled = scaler.transform(features)
+        
+        # 4. Predict
+        prediction_class = int(model.predict(features_scaled)[0])
+        
+        # 5. Symptom Boosting (Heuristic Layer)
+        # If the model says "Healthy" (0) but user reports specific symptoms, 
+        # we can override or append to the warning.
+        
+        # Check for user-reported symptoms
+        reported_pale = data.get('pale_skin') == 1
+        reported_fatigue = data.get('fatigue') == 1
+        
+        result = RISK_MAP.get(prediction_class, RISK_MAP[0])
+        
+        # Heuristic Override: If healthy but has anemia symptoms
+        if prediction_class == 0 and (reported_pale or reported_fatigue):
+            result = {
+                "label": "Moderate Risk: Possible Iron Deficiency",
+                "measures": "While your demographic profile is low-risk, your reported symptoms (Pale Skin/Fatigue) are strong indicators of Anemia. Consider a blood test."
+            }
 
         return jsonify({
-            "success": True,
-            "prediction": pred_int,
-            "label": label,
-            "measures": measures
+            'success': True,
+            'label': result['label'],
+            'measures': result['measures']
         })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
-if __name__ == "__main__":
-    app.run(debug=True)
+    except Exception as e:
+        print(f"Prediction Error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)

@@ -1,81 +1,108 @@
-import os
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score, classification_report
 import pickle
+import os
 
-def main():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_dir = os.path.abspath(os.path.join(current_dir, ".."))
-    data_path = os.path.join(project_dir, "data", "nutrition_data.csv")
+def load_and_process_data():
+    print("Loading NHANES datasets...")
+    
+    # Define paths (assuming files are in the 'data' folder next to 'backend')
+    base_path = os.path.join(os.path.dirname(__file__), '..', 'data')
+    
+    # Load the CSVs
+    # Using 'SEQN' as the index since it's the unique ID for participants
+    demo_df = pd.read_csv(os.path.join(base_path, 'demographic.csv')).set_index('SEQN')
+    exam_df = pd.read_csv(os.path.join(base_path, 'examination.csv')).set_index('SEQN')
+    labs_df = pd.read_csv(os.path.join(base_path, 'labs.csv')).set_index('SEQN')
+    
+    # We merge them into one big table
+    print("Merging datasets...")
+    df = demo_df.join([exam_df, labs_df], how='inner')
+    
+    # --- Feature Engineering ---
+    
+    # 1. Rename columns to be human-readable
+    # RIAGENDR: 1=Male, 2=Female
+    # RIDAGEYR: Age in years
+    # BMXWT: Weight (kg)
+    # BMXHT: Height (cm)
+    # LBXHGB: Hemoglobin (g/dL) - Main indicator for Anemia/Iron Deficiency
+    # LBXSCH: Total Cholesterol (mg/dL) - Indicator for poor diet/heart risk
+    
+    keep_cols = ['RIAGENDR', 'RIDAGEYR', 'BMXWT', 'BMXHT', 'LBXHGB', 'LBXSCH']
+    df = df[keep_cols].copy()
+    
+    # 2. Drop rows with missing values in these critical columns
+    df.dropna(inplace=True)
+    
+    # 3. Process Inputs (X)
+    # Convert Gender to 0=Male, 1=Female (Original: 1=Male, 2=Female)
+    df['gender'] = df['RIAGENDR'].apply(lambda x: 0 if x == 1 else 1)
+    
+    # Calculate BMI: Weight(kg) / (Height(m)^2)
+    # Height is in cm, so divide by 100
+    df['bmi'] = df['BMXWT'] / ((df['BMXHT'] / 100) ** 2)
+    
+    # 4. Define Targets (Y) - The "Deficiency" Label
+    # We will categorize patients based on real medical thresholds
+    # Label 0: Healthy
+    # Label 1: Anemia (Iron Deficiency)
+    # Label 2: High Cholesterol (Risk)
+    
+    def classify_patient(row):
+        # Anemia Thresholds (WHO): Men < 13.0, Women < 12.0
+        is_female = row['gender'] == 1
+        hb = row['LBXHGB']
+        
+        if (is_female and hb < 12.0) or (not is_female and hb < 13.0):
+            return 1 # Anemia / Iron Deficiency
+            
+        # High Cholesterol > 240 mg/dL
+        if row['LBXSCH'] > 240:
+            return 2 # High Cholesterol / Diet Risk
+            
+        return 0 # Healthy / Low Risk
 
-    print("📄 Loading data from:", data_path)
-    df = pd.read_csv(data_path)
-    print("✅ Data loaded. Shape:", df.shape)
+    df['deficiency_label'] = df.apply(classify_patient, axis=1)
+    
+    # Final Selection
+    X = df[['RIDAGEYR', 'gender', 'bmi']] # Features: Age, Gender, BMI
+    y = df['deficiency_label']            # Target: Calculated Label
+    
+    print(f"Processed data: {len(df)} samples.")
+    print("Class distribution:\n", y.value_counts())
+    
+    return X, y
 
-    # Show how many samples per class
-    print("\n🔢 Class distribution in dataset (deficiency_label):")
-    print(df["deficiency_label"].value_counts().sort_index())
-
-    feature_cols = [
-        "age",
-        "gender",
-        "height",
-        "weight",
-        "diet_type",
-        "sunlight",
-        "fatigue",
-        "hair_fall",
-        "pale_skin",
-        "bone_pain",
-        "cracked_lips"
-    ]
-    target_col = "deficiency_label"
-
-    # Safety: ensure columns exist
-    for col in feature_cols + [target_col]:
-        if col not in df.columns:
-            raise ValueError(f"Missing column in CSV: {col}")
-
-    X = df[feature_cols]
-    y = df[target_col]
-
-    # Stratified split (we now have enough rows)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    print("\n📚 Train size:", X_train.shape, " Test size:", X_test.shape)
-
+def train():
+    X, y = load_and_process_data()
+    
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Scale features (Age and BMI have vastly different ranges)
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-
-    # You can tweak k if you want
-    knn = KNeighborsClassifier(n_neighbors=5)
-    knn.fit(X_train_scaled, y_train)
-
-    y_pred = knn.predict(X_test_scaled)
-    acc = accuracy_score(y_test, y_pred)
-    print(f"\n🎯 Accuracy on test set: {acc:.4f}")
-    print("\n📊 Classification report:\n", classification_report(y_test, y_pred))
-
-    # Show which classes the model actually predicted
-    print("🧪 Unique predicted classes in test set:", sorted(set(y_pred)))
-
-    artifact = {
-        "model": knn,
-        "scaler": scaler,
-        "columns": feature_cols
-    }
-
-    model_path = os.path.join(current_dir, "model.pkl")
-    with open(model_path, "wb") as f:
-        pickle.dump(artifact, f)
-
-    print("\n✅ New model saved to:", model_path)
+    
+    # Train Model (RandomForest is robust for tabular medical data)
+    print("Training Random Forest Classifier...")
+    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+    clf.fit(X_train_scaled, y_train)
+    
+    # Evaluate
+    accuracy = clf.score(X_test_scaled, y_test)
+    print(f"Model Accuracy: {accuracy * 100:.2f}%")
+    
+    # Save Model and Scaler
+    # We need to save the scaler too, to scale user input later!
+    with open('model.pkl', 'wb') as f:
+        pickle.dump({'model': clf, 'scaler': scaler}, f)
+    
+    print("Model and scaler saved to model.pkl")
 
 if __name__ == "__main__":
-    main()
+    train()
